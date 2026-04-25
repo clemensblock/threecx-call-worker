@@ -5,8 +5,12 @@ from datetime import UTC, datetime
 
 import structlog
 
-from worker.config import settings
-from worker.db import get_connected_at, lookup_customer_by_phone, write_call_event
+from worker.db import (
+    get_connected_at,
+    get_monitored_extensions,
+    lookup_customer_by_phone,
+    write_call_event,
+)
 from worker.metrics import events_failed_total, events_processed_total
 from worker.phone import normalize_phone
 from worker.threecx_client import get_participant_details
@@ -47,7 +51,7 @@ async def handle_event(event: dict) -> None:
     extension = match.group(1)
     participant_id_str = match.group(2)
 
-    if extension not in settings.monitored_extensions:
+    if extension not in get_monitored_extensions():
         logger.debug(
             "event.unmonitored_extension",
             extension=extension,

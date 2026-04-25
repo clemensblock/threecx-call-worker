@@ -22,6 +22,7 @@ def _mock_db():
         patch("worker.event_handler.lookup_customer_by_phone", return_value=None),
         patch("worker.event_handler.get_connected_at", return_value=None),
         patch("worker.event_handler.get_participant_details", return_value=None),
+        patch("worker.event_handler.get_monitored_extensions", return_value={"100", "101", "102"}),
     ):
         yield mock_write
 
@@ -141,6 +142,7 @@ async def test_customer_lookup_on_ringing() -> None:
         ),
         patch("worker.event_handler.get_connected_at", return_value=None),
         patch("worker.event_handler.get_participant_details", return_value=None),
+        patch("worker.event_handler.get_monitored_extensions", return_value={"100", "101", "102"}),
     ):
         event = _load_event("01_inbound_ringing.json")
         await handle_event(event)

@@ -7,19 +7,15 @@ class Settings(BaseSettings):
     threecx_base_url: str
     threecx_client_id: str
     threecx_client_secret: str
-    threecx_monitored_extensions: str
 
     supabase_url: str
     supabase_service_role_key: str
 
     log_level: str = "INFO"
     reconnect_max_backoff: int = 60
+    extensions_refresh_seconds: int = 60
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
-
-    @property
-    def monitored_extensions(self) -> list[str]:
-        return [e.strip() for e in self.threecx_monitored_extensions.split(",") if e.strip()]
 
     @property
     def threecx_host(self) -> str:

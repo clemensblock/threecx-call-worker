@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import structlog
 from supabase import Client, create_client
 
@@ -10,12 +12,37 @@ logger = structlog.get_logger()
 
 _client: Client | None = None
 
+_cached_extensions: set[str] = set()
+_extensions_fetched_at: float = 0.0
+
 
 def get_supabase() -> Client:
     global _client
     if _client is None:
         _client = create_client(settings.supabase_url, settings.supabase_service_role_key)
     return _client
+
+
+def get_monitored_extensions() -> set[str]:
+    global _cached_extensions, _extensions_fetched_at
+    now = time.monotonic()
+    if _cached_extensions and (now - _extensions_fetched_at) < settings.extensions_refresh_seconds:
+        return _cached_extensions
+    try:
+        result = (
+            get_supabase()
+            .table("threecx_monitored_extensions")
+            .select("extension")
+            .eq("is_active", True)
+            .execute()
+        )
+        _cached_extensions = {row["extension"] for row in result.data}
+        _extensions_fetched_at = now
+        logger.info("db.extensions_refreshed", count=len(_cached_extensions))
+    except Exception:
+        logger.exception("db.extensions_refresh_failed")
+        # Keep stale cache if refresh fails
+    return _cached_extensions
 
 
 def lookup_customer_by_phone(phone_e164: str) -> str | None:

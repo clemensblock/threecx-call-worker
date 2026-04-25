@@ -24,10 +24,11 @@ Long-running Python worker that maintains a persistent WebSocket connection to t
 
 ### Database Migration
 
-Before deploying, run the migration manually against the Supabase database:
+Before deploying, run the migrations manually against the Supabase database:
 
 ```bash
 psql "$DATABASE_URL" -f migrations/001_inbound_support.sql
+psql "$DATABASE_URL" -f migrations/002_monitored_extensions.sql
 ```
 
 This adds:
@@ -36,6 +37,7 @@ This adds:
 - Inbound-specific columns on `call_logs` (`direction`, `participant_id`, `state`, `extension`, etc.)
 - Unique constraint `(participant_id, state)` for idempotent event processing
 - RLS policy for agent/admin access control
+- `threecx_monitored_extensions` table for frontend-managed extension monitoring
 
 ## Local Development
 
@@ -69,11 +71,22 @@ All config via environment variables (validated by pydantic-settings on startup)
 | `THREECX_BASE_URL` | Yes | — | 3CX server URL, e.g. `https://pbx.tinana.de:5001` |
 | `THREECX_CLIENT_ID` | Yes | — | API app client ID from 3CX |
 | `THREECX_CLIENT_SECRET` | Yes | — | API key from 3CX |
-| `THREECX_MONITORED_EXTENSIONS` | Yes | — | Comma-separated, e.g. `100,101,102` |
 | `SUPABASE_URL` | Yes | — | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | — | Service role key (write access) |
 | `LOG_LEVEL` | No | `INFO` | Logging level |
 | `RECONNECT_MAX_BACKOFF` | No | `60` | Max seconds between reconnect attempts |
+| `EXTENSIONS_REFRESH_SECONDS` | No | `60` | How often to re-read monitored extensions from DB |
+
+### Monitored Extensions
+
+Extensions to monitor are stored in the `threecx_monitored_extensions` table (not an env var). Add/remove extensions via the CRM frontend or directly in the DB:
+
+```sql
+INSERT INTO threecx_monitored_extensions (extension, label) VALUES ('100', 'Empfang');
+INSERT INTO threecx_monitored_extensions (extension, label) VALUES ('101', 'Vertrieb');
+```
+
+The worker refreshes the extension list from the DB every `EXTENSIONS_REFRESH_SECONDS` seconds (default: 60).
 
 ## Deployment (K3s Cluster)
 
