@@ -1,0 +1,12 @@
+{
+  "entity": "/callcontrol/102/participants/78",
+  "data": {
+    "id": 78,
+    "status": "Ringing",
+    "party_caller_id": "0171-55512345",
+    "party_dn_type": "Wexternalline",
+    "party_caller_type": "Wexternalline",
+    "party_did": "",
+    "device_id": "sip:102@pbx.tinana.de"
+  }
+}
