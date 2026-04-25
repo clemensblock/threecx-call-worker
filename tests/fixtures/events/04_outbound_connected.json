@@ -1,0 +1,12 @@
+{
+  "entity": "/callcontrol/101/participants/55",
+  "data": {
+    "id": 55,
+    "status": "Connected",
+    "party_caller_id": "101",
+    "party_dn_type": "Winternal",
+    "party_caller_type": "Winternal",
+    "party_did": "",
+    "device_id": "sip:101@pbx.tinana.de"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "entity": "/callcontrol/999/participants/10",
+  "data": {
+    "id": 10,
+    "status": "Ringing",
+    "party_caller_id": "+49 40 1234567",
+    "party_dn_type": "Wexternalline",
+    "party_caller_type": "Wexternalline",
+    "party_did": "",
+    "device_id": "sip:999@pbx.tinana.de"
+  }
+}

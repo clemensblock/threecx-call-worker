@@ -1,0 +1,17 @@
+# Uncomment when Prometheus ServiceMonitor CRD is available in the cluster
+#
+# apiVersion: monitoring.coreos.com/v1
+# kind: ServiceMonitor
+# metadata:
+#   name: threecx-call-worker
+#   namespace: threecx-worker
+#   labels:
+#     app: threecx-call-worker
+# spec:
+#   selector:
+#     matchLabels:
+#       app: threecx-call-worker
+#   endpoints:
+#     - port: http
+#       path: /metrics
+#       interval: 30s

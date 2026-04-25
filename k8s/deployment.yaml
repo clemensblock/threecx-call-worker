@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: threecx-call-worker
+  namespace: threecx-worker
+  labels:
+    app: threecx-call-worker
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: threecx-call-worker
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: threecx-call-worker
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/clemensblock/threecx-call-worker:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: threecx-worker-secrets
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+      imagePullSecrets:
+        - name: ghcr-secret
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
