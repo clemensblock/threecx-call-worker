@@ -5,7 +5,15 @@ from datetime import UTC, datetime
 
 import structlog
 
+from worker.call_tracker import (
+    find_group,
+    get_or_create_group,
+    mark_connected,
+    remove_group,
+    should_suppress,
+)
 from worker.db import (
+    delete_participant_entries,
     get_caller_info,
     get_connected_at,
     get_monitored_extensions,
@@ -127,6 +135,10 @@ async def handle_event(event: dict) -> None:
 
         # event_type=1 (Remove) means participant terminated, even without details
         if not details and event_type == 1:
+            if should_suppress(extension, participant_id_str):
+                log.info("event.phantom_suppressed", event_type=event_type, state="terminated")
+                events_processed_total.inc()
+                return
             log.info("event.participant_removed", event_type=event_type)
             now_iso = datetime.now(UTC).isoformat()
             caller = get_caller_info(participant_id_str)
@@ -142,6 +154,10 @@ async def handle_event(event: dict) -> None:
                 terminated_at=now_iso,
                 duration_seconds=duration,
             )
+            # Clean up call group when primary terminates
+            group = find_group(extension, participant_id_str)
+            if group and group.primary == participant_id_str:
+                remove_group(extension)
             events_processed_total.inc()
             return
 
@@ -188,6 +204,9 @@ async def handle_event(event: dict) -> None:
         now_iso = datetime.now(UTC).isoformat()
 
         if state == "ringing" and direction == "inbound":
+            # Register in call tracker for dedup
+            get_or_create_group(extension, participant_id_str)
+
             customer_id = None
             if caller_id_e164:
                 customer_id = lookup_customer_by_phone(caller_id_e164)
@@ -204,6 +223,11 @@ async def handle_event(event: dict) -> None:
             )
 
         elif state == "connected":
+            # This participant is the real one — mark as primary and clean up phantoms
+            phantoms = mark_connected(extension, participant_id_str)
+            for phantom_id in phantoms:
+                delete_participant_entries(phantom_id)
+
             # Enrich with caller info from ringing entry if not available
             if not caller_id_e164:
                 caller = get_caller_info(participant_id_str)
@@ -221,6 +245,12 @@ async def handle_event(event: dict) -> None:
             )
 
         elif state == "terminated":
+            if should_suppress(extension, participant_id_str):
+                log.info("event.phantom_suppressed", state="terminated")
+                events_processed_total.inc()
+                log.info("event.processed", state=state, direction=direction)
+                return
+
             duration = _calc_duration(participant_id_str, log)
             # Enrich with caller info from ringing entry if not available
             if not caller_id_e164:
@@ -238,6 +268,10 @@ async def handle_event(event: dict) -> None:
                 terminated_at=now_iso,
                 duration_seconds=duration,
             )
+            # Clean up call group when primary terminates
+            group = find_group(extension, participant_id_str)
+            if group and (group.primary == participant_id_str or group.primary is None):
+                remove_group(extension)
 
         elif state == "failed":
             write_call_event(
