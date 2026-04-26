@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import structlog
 
 from worker.db import (
+    get_caller_info,
     get_connected_at,
     get_monitored_extensions,
     get_route_to,
@@ -73,6 +74,20 @@ def _extract_details(event: dict) -> dict | None:
     return None
 
 
+def _calc_duration(participant_id: str, log: structlog.stdlib.BoundLogger) -> int | None:
+    """Calculate call duration from connected_at to now."""
+    connected_at_str = get_connected_at(participant_id)
+    if not connected_at_str:
+        return None
+    try:
+        connected_dt = datetime.fromisoformat(connected_at_str)
+        terminated_dt = datetime.now(UTC)
+        return int((terminated_dt - connected_dt).total_seconds())
+    except (ValueError, TypeError):
+        log.warning("event.duration_calc_failed", connected_at=connected_at_str)
+        return None
+
+
 async def handle_event(event: dict) -> None:
     entity = event.get("entity", "")
     event_type = event.get("event_type")
@@ -113,12 +128,19 @@ async def handle_event(event: dict) -> None:
         # event_type=1 (Remove) means participant terminated, even without details
         if not details and event_type == 1:
             log.info("event.participant_removed", event_type=event_type)
+            now_iso = datetime.now(UTC).isoformat()
+            caller = get_caller_info(participant_id_str)
+            duration = _calc_duration(participant_id_str, log)
             write_call_event(
                 participant_id=participant_id_str,
                 state="terminated",
-                direction="inbound",
+                direction=caller.get("direction", "inbound"),
                 extension=extension,
-                terminated_at=datetime.now(UTC).isoformat(),
+                caller_id=caller.get("caller_id"),
+                caller_id_e164=caller.get("caller_id_e164"),
+                customer_id=caller.get("customer_id"),
+                terminated_at=now_iso,
+                duration_seconds=duration,
             )
             events_processed_total.inc()
             return
@@ -182,6 +204,12 @@ async def handle_event(event: dict) -> None:
             )
 
         elif state == "connected":
+            # Enrich with caller info from ringing entry if not available
+            if not caller_id_e164:
+                caller = get_caller_info(participant_id_str)
+                caller_id_raw = caller_id_raw or caller.get("caller_id")
+                caller_id_e164 = caller.get("caller_id_e164")
+
             write_call_event(
                 participant_id=participant_id_str,
                 state="connected",
@@ -193,15 +221,12 @@ async def handle_event(event: dict) -> None:
             )
 
         elif state == "terminated":
-            connected_at_str = get_connected_at(participant_id_str)
-            duration = None
-            if connected_at_str:
-                try:
-                    connected_dt = datetime.fromisoformat(connected_at_str)
-                    terminated_dt = datetime.now(UTC)
-                    duration = int((terminated_dt - connected_dt).total_seconds())
-                except (ValueError, TypeError):
-                    log.warning("event.duration_calc_failed", connected_at=connected_at_str)
+            duration = _calc_duration(participant_id_str, log)
+            # Enrich with caller info from ringing entry if not available
+            if not caller_id_e164:
+                caller = get_caller_info(participant_id_str)
+                caller_id_raw = caller_id_raw or caller.get("caller_id")
+                caller_id_e164 = caller.get("caller_id_e164")
 
             write_call_event(
                 participant_id=participant_id_str,

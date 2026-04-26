@@ -145,3 +145,22 @@ def get_connected_at(participant_id: str) -> str | None:
     except Exception:
         logger.exception("db.get_connected_at_failed", participant_id=participant_id)
     return None
+
+
+def get_caller_info(participant_id: str) -> dict:
+    """Look up caller_id and caller_id_e164 from the ringing entry."""
+    try:
+        result = (
+            get_supabase()
+            .table("call_logs")
+            .select("caller_id,caller_id_e164,direction,customer_id")
+            .eq("participant_id", participant_id)
+            .eq("state", "ringing")
+            .limit(1)
+            .execute()
+        )
+        if result.data:
+            return result.data[0]
+    except Exception:
+        logger.exception("db.get_caller_info_failed", participant_id=participant_id)
+    return {}
