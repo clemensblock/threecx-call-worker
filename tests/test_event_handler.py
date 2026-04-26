@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from worker.event_handler import handle_event
+from worker.event_handler import _extract_details, handle_event
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "events"
 
@@ -171,3 +171,64 @@ async def test_routepoint_event_processed(_mock_db: MagicMock) -> None:
     assert call_kwargs["direction"] == "inbound"
     assert call_kwargs["extension"] == "crmintegration"
     assert call_kwargs["participant_id"] == "1344"
+
+
+@pytest.mark.asyncio
+async def test_routepoint_remove_event_terminates(_mock_db: MagicMock) -> None:
+    """event_type=1 (Remove) with empty attached_data should write terminated."""
+    event = {
+        "event_type": 1,
+        "entity": "/callcontrol/crmintegration/participants/1355",
+        "attached_data": {},
+    }
+    await handle_event(event)
+    _mock_db.assert_called_once()
+    call_kwargs = _mock_db.call_args.kwargs
+    assert call_kwargs["state"] == "terminated"
+    assert call_kwargs["extension"] == "crmintegration"
+    assert call_kwargs["terminated_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_wrapped_response_details(_mock_db: MagicMock) -> None:
+    """attached_data with WebSocket Response wrapper is unwrapped correctly."""
+    event = {
+        "entity": "/callcontrol/crmintegration/participants/1360",
+        "attached_data": {
+            "StatusCode": 200,
+            "Response": {
+                "id": 1360,
+                "status": "Connected",
+                "dn": "crmintegration",
+                "party_caller_id": "+49 30 123456",
+                "party_dn_type": "Wexternalline",
+                "party_caller_type": "Wexternalline",
+                "party_did": "+493099900",
+            },
+        },
+    }
+    await handle_event(event)
+    _mock_db.assert_called_once()
+    call_kwargs = _mock_db.call_args.kwargs
+    assert call_kwargs["state"] == "connected"
+    assert call_kwargs["extension"] == "crmintegration"
+
+
+class TestExtractDetails:
+    def test_direct_participant_object(self) -> None:
+        event = {"attached_data": {"status": "Ringing", "party_caller_id": "+49"}}
+        assert _extract_details(event) == {"status": "Ringing", "party_caller_id": "+49"}
+
+    def test_websocket_response_wrapper(self) -> None:
+        event = {"attached_data": {"StatusCode": 200, "Response": {"status": "Connected", "id": 1}}}
+        assert _extract_details(event) == {"status": "Connected", "id": 1}
+
+    def test_empty_attached_data(self) -> None:
+        assert _extract_details({"attached_data": {}}) is None
+
+    def test_no_attached_data(self) -> None:
+        assert _extract_details({}) is None
+
+    def test_response_list(self) -> None:
+        event = {"attached_data": {"Response": [{"status": "Ringing", "id": 5}]}}
+        assert _extract_details(event) == {"status": "Ringing", "id": 5}
