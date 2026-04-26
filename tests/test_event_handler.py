@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from worker.event_handler import _extract_details, handle_event
+from worker.event_handler import _extract_details, _routed_participants, handle_event
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "events"
 
@@ -17,12 +17,15 @@ def _load_event(filename: str) -> dict:
 
 @pytest.fixture(autouse=True)
 def _mock_db():
+    _routed_participants.clear()
     with (
         patch("worker.event_handler.write_call_event") as mock_write,
         patch("worker.event_handler.lookup_customer_by_phone", return_value=None),
         patch("worker.event_handler.get_connected_at", return_value=None),
         patch("worker.event_handler.get_participant_details", return_value=None),
         patch("worker.event_handler.get_monitored_extensions", return_value={"100", "101", "102"}),
+        patch("worker.event_handler.get_route_to", return_value=None),
+        patch("worker.event_handler.route_participant", return_value=True),
     ):
         yield mock_write
 
@@ -232,3 +235,76 @@ class TestExtractDetails:
     def test_response_list(self) -> None:
         event = {"attached_data": {"Response": [{"status": "Ringing", "id": 5}]}}
         assert _extract_details(event) == {"status": "Ringing", "id": 5}
+
+
+@pytest.mark.asyncio
+async def test_routepoint_triggers_route_to() -> None:
+    """When a routepoint has route_to configured, route_participant is called."""
+    _routed_participants.clear()
+    with (
+        patch("worker.event_handler.write_call_event") as mock_write,
+        patch("worker.event_handler.lookup_customer_by_phone", return_value=None),
+        patch("worker.event_handler.get_connected_at", return_value=None),
+        patch("worker.event_handler.get_participant_details", return_value=None),
+        patch(
+            "worker.event_handler.get_monitored_extensions",
+            return_value={"crmintegration", "1000"},
+        ),
+        patch("worker.event_handler.get_route_to", return_value="1000"),
+        patch("worker.event_handler.route_participant", return_value=True) as mock_route,
+    ):
+        event = {
+            "entity": "/callcontrol/crmintegration/participants/1400",
+            "attached_data": {
+                "status": "Connected",
+                "party_caller_id": "+49 171 9999999",
+                "party_dn_type": "Wexternalline",
+                "party_caller_type": "Wexternalline",
+            },
+        }
+        await handle_event(event)
+        mock_route.assert_called_once_with(
+            dn="crmintegration",
+            participant_id="1400",
+            destination="1000",
+        )
+        mock_write.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_routepoint_no_duplicate_route() -> None:
+    """Second event for same participant should NOT trigger route again."""
+    _routed_participants.clear()
+    with (
+        patch("worker.event_handler.write_call_event"),
+        patch("worker.event_handler.lookup_customer_by_phone", return_value=None),
+        patch("worker.event_handler.get_connected_at", return_value=None),
+        patch("worker.event_handler.get_participant_details", return_value=None),
+        patch(
+            "worker.event_handler.get_monitored_extensions",
+            return_value={"crmintegration"},
+        ),
+        patch("worker.event_handler.get_route_to", return_value="1000"),
+        patch("worker.event_handler.route_participant", return_value=True) as mock_route,
+    ):
+        event = {
+            "entity": "/callcontrol/crmintegration/participants/1401",
+            "attached_data": {
+                "status": "Connected",
+                "party_caller_id": "+49 171 8888888",
+                "party_dn_type": "Wexternalline",
+                "party_caller_type": "Wexternalline",
+            },
+        }
+        await handle_event(event)
+        await handle_event(event)
+        assert mock_route.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_no_route_for_regular_extension(_mock_db: MagicMock) -> None:
+    """Regular extensions (no route_to) should NOT trigger route_participant."""
+    with patch("worker.event_handler.route_participant") as mock_route:
+        event = _load_event("01_inbound_ringing.json")
+        await handle_event(event)
+        mock_route.assert_not_called()

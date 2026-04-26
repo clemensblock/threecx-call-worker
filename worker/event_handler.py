@@ -8,16 +8,21 @@ import structlog
 from worker.db import (
     get_connected_at,
     get_monitored_extensions,
+    get_route_to,
     lookup_customer_by_phone,
     write_call_event,
 )
 from worker.metrics import events_failed_total, events_processed_total
 from worker.phone import normalize_phone
-from worker.threecx_client import get_participant_details
+from worker.threecx_client import get_participant_details, route_participant
 
 logger = structlog.get_logger()
 
 PARTICIPANT_PATH_RE = re.compile(r"^/callcontrol/([^/]+)/participants/(\d+)$")
+
+# Track participants we already attempted to route (prevent duplicate routeto calls)
+_routed_participants: set[str] = set()
+_MAX_ROUTED_CACHE = 500
 
 
 def _determine_direction(details: dict) -> str:
@@ -129,6 +134,27 @@ async def handle_event(event: dict) -> None:
             return
 
         direction = _determine_direction(details)
+
+        # Routepoint auto-forward: when a call arrives at a routepoint
+        # with a route_to target, forward it to the destination extension.
+        route_to = get_route_to(extension)
+        route_key = f"{extension}:{participant_id_str}"
+        if route_to and state in ("ringing", "connected") and route_key not in _routed_participants:
+            if len(_routed_participants) > _MAX_ROUTED_CACHE:
+                _routed_participants.clear()
+            _routed_participants.add(route_key)
+            log.info(
+                "event.routepoint_forwarding",
+                route_to=route_to,
+                status=state,
+            )
+            routed = await route_participant(
+                dn=extension,
+                participant_id=participant_id_str,
+                destination=route_to,
+            )
+            if not routed:
+                log.warning("event.routepoint_forward_failed", route_to=route_to)
 
         party_did = details.get("party_did", "")
         if not party_did:
