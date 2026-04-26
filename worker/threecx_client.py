@@ -52,6 +52,68 @@ def invalidate_token() -> None:
     _token_cache.clear()
 
 
+async def route_participant(
+    dn: str,
+    participant_id: str,
+    destination: str,
+    *,
+    timeout: int = 30,
+    reason: str = "ForwardAll",
+) -> bool:
+    """Route a participant from a routepoint DN to a destination extension.
+
+    Uses POST /callcontrol/{dn}/participants/{id}/routeto.
+    Returns True on success, False on failure.
+    """
+    token = await get_token()
+    url = (
+        f"{settings.threecx_base_url}/callcontrol/{dn}"
+        f"/participants/{participant_id}/routeto"
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+    body = {
+        "destination": destination,
+        "timeout": timeout,
+        "reason": reason,
+    }
+
+    async with httpx.AsyncClient(verify=False) as client:
+        try:
+            resp = await client.post(url, headers=headers, json=body)
+            if resp.status_code == 401:
+                logger.warning("threecx.401_on_route", url=url)
+                invalidate_token()
+                token = await get_token(force_refresh=True)
+                headers["Authorization"] = f"Bearer {token}"
+                resp = await client.post(url, headers=headers, json=body)
+            resp.raise_for_status()
+            logger.info(
+                "threecx.route_success",
+                dn=dn,
+                participant_id=participant_id,
+                destination=destination,
+            )
+            return True
+        except httpx.HTTPStatusError as exc:
+            logger.error(
+                "threecx.route_failed",
+                dn=dn,
+                participant_id=participant_id,
+                destination=destination,
+                status_code=exc.response.status_code,
+                body=exc.response.text[:500],
+            )
+            return False
+        except Exception:
+            logger.exception(
+                "threecx.route_error",
+                dn=dn,
+                participant_id=participant_id,
+                destination=destination,
+            )
+            return False
+
+
 async def get_participant_details(extension: str, participant_id: str) -> dict | None:
     token = await get_token()
     url = f"{settings.threecx_base_url}/callcontrol/{extension}/participants/{participant_id}"
