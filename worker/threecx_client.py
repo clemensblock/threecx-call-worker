@@ -129,6 +129,11 @@ async def get_participant_details(extension: str, participant_id: str) -> dict |
                 resp = await client.get(url, headers=headers)
             resp.raise_for_status()
             return resp.json()
-        except httpx.HTTPStatusError:
-            logger.exception("threecx.participant_fetch_failed", url=url)
+        except httpx.HTTPStatusError as exc:
+            logger.error(
+                "threecx.participant_fetch_failed",
+                url=url,
+                status_code=exc.response.status_code,
+                body=exc.response.text[:300],
+            )
             return None
