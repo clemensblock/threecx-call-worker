@@ -118,12 +118,14 @@ def write_call_event(
             state=state,
             direction=direction,
         )
-    except Exception:
+    except Exception as exc:
         db_write_errors_total.inc()
-        logger.exception(
+        logger.error(
             "db.call_event_write_failed",
             participant_id=participant_id,
             state=state,
+            error=str(exc),
+            error_type=type(exc).__name__,
         )
 
 

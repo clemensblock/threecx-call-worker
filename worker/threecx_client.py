@@ -74,7 +74,7 @@ async def route_participant(
         "reason": reason,
     }
 
-    async with httpx.AsyncClient(verify=False) as client:
+    async with httpx.AsyncClient(verify=False, timeout=15.0) as client:
         try:
             resp = await client.post(url, headers=headers, json=body)
             if resp.status_code == 401:
@@ -101,12 +101,14 @@ async def route_participant(
                 body=exc.response.text[:500],
             )
             return False
-        except Exception:
-            logger.exception(
+        except Exception as exc:
+            logger.error(
                 "threecx.route_error",
                 dn=dn,
                 participant_id=participant_id,
                 destination=destination,
+                error=str(exc),
+                error_type=type(exc).__name__,
             )
             return False
 
