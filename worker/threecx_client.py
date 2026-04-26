@@ -66,10 +66,7 @@ async def route_participant(
     Returns True on success, False on failure.
     """
     token = await get_token()
-    url = (
-        f"{settings.threecx_base_url}/callcontrol/{dn}"
-        f"/participants/{participant_id}/routeto"
-    )
+    url = f"{settings.threecx_base_url}/callcontrol/{dn}/participants/{participant_id}/routeto"
     headers = {"Authorization": f"Bearer {token}"}
     body = {
         "destination": destination,

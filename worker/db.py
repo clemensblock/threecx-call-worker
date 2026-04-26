@@ -38,10 +38,7 @@ def get_monitored_extensions() -> set[str]:
             .execute()
         )
         _cached_extensions = {row["extension"] for row in result.data}
-        _cached_route_map = {
-            row["extension"]: row.get("route_to")
-            for row in result.data
-        }
+        _cached_route_map = {row["extension"]: row.get("route_to") for row in result.data}
         _extensions_fetched_at = now
         logger.info("db.extensions_refreshed", count=len(_cached_extensions))
     except Exception:
