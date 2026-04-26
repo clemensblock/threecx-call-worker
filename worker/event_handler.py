@@ -41,8 +41,36 @@ def _extract_state(details: dict) -> str | None:
     return state_map.get(status)
 
 
+def _extract_details(event: dict) -> dict | None:
+    """Extract participant details from the event payload.
+
+    3CX sends attached_data in two formats:
+    - Direct participant object: {"status": "Ringing", "party_caller_id": ...}
+    - WebSocket response wrapper: {"StatusCode": 200, "Response": {"status": ...}}
+    """
+    attached = event.get("attached_data", event.get("data"))
+    if not attached or not isinstance(attached, dict):
+        return None
+
+    # Direct participant object
+    if attached.get("status"):
+        return attached
+
+    # WebSocket response wrapper
+    resp = attached.get("Response")
+    if isinstance(resp, dict) and resp.get("status"):
+        return resp
+
+    # Response might be a list with one item
+    if isinstance(resp, list) and resp and isinstance(resp[0], dict):
+        return resp[0]
+
+    return None
+
+
 async def handle_event(event: dict) -> None:
     entity = event.get("entity", "")
+    event_type = event.get("event_type")
     match = PARTICIPANT_PATH_RE.match(entity)
     if not match:
         logger.debug("event.ignored", entity=entity)
@@ -72,14 +100,26 @@ async def handle_event(event: dict) -> None:
     )
 
     try:
-        event_data = event.get("attached_data", event.get("data", {}))
+        details = _extract_details(event)
 
-        details = event_data if event_data.get("status") else None
         if not details:
             details = await get_participant_details(extension, participant_id_str)
 
+        # event_type=1 (Remove) means participant terminated, even without details
+        if not details and event_type == 1:
+            log.info("event.participant_removed", event_type=event_type)
+            write_call_event(
+                participant_id=participant_id_str,
+                state="terminated",
+                direction="inbound",
+                extension=extension,
+                terminated_at=datetime.now(UTC).isoformat(),
+            )
+            events_processed_total.inc()
+            return
+
         if not details:
-            log.warning("event.no_participant_details")
+            log.warning("event.no_participant_details", event_type=event_type)
             events_failed_total.inc()
             return
 

@@ -69,6 +69,16 @@ async def _listen(ws: websockets.ClientConnection) -> None:
                 raw_message = raw_message.decode("utf-8")
             envelope = json.loads(raw_message)
             inner = envelope.get("event", envelope)
+            entity = inner.get("entity", "")
+            if entity and "participants" in entity:
+                ad = inner.get("attached_data")
+                ad_info = list(ad.keys()) if isinstance(ad, dict) else str(type(ad).__name__)
+                logger.debug(
+                    "ws.raw_event",
+                    event_type=inner.get("event_type"),
+                    entity=entity,
+                    attached_data_keys=ad_info,
+                )
             await handle_event(inner)
         except json.JSONDecodeError:
             logger.warning("ws.invalid_json", raw=str(raw_message)[:200])
