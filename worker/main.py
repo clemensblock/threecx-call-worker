@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import signal
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -49,7 +50,7 @@ def _configure_logging() -> None:
             structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(
-            structlog.get_level_from_name(settings.log_level)
+            getattr(logging, settings.log_level.upper(), logging.INFO)
         ),
         context_class=dict,
         logger_factory=structlog.PrintLoggerFactory(),
@@ -66,10 +67,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     _configure_logging()
 
     logger = structlog.get_logger()
-    logger.info(
-        "worker.starting",
-        monitored_extensions=settings.monitored_extensions,
-    )
+    logger.info("worker.starting")
 
     loop = asyncio.get_running_loop()
 
