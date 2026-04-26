@@ -101,7 +101,7 @@ async def test_unmonitored_extension_ignored(_mock_db: MagicMock) -> None:
 
 @pytest.mark.asyncio
 async def test_non_participant_path_ignored(_mock_db: MagicMock) -> None:
-    event = {"entity": "/callcontrol/100/calls/5", "data": {}}
+    event = {"entity": "/callcontrol/100/calls/5", "attached_data": {}}
     await handle_event(event)
     _mock_db.assert_not_called()
 

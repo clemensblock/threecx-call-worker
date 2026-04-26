@@ -1,6 +1,6 @@
 {
   "entity": "/callcontrol/100/participants/42",
-  "data": {
+  "attached_data": {
     "id": 42,
     "status": "Terminated",
     "party_caller_id": "+49 30 12345678",

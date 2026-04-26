@@ -67,8 +67,9 @@ async def _listen(ws: websockets.ClientConnection) -> None:
         try:
             if isinstance(raw_message, bytes):
                 raw_message = raw_message.decode("utf-8")
-            event = json.loads(raw_message)
-            await handle_event(event)
+            envelope = json.loads(raw_message)
+            inner = envelope.get("event", envelope)
+            await handle_event(inner)
         except json.JSONDecodeError:
             logger.warning("ws.invalid_json", raw=str(raw_message)[:200])
         except Exception:

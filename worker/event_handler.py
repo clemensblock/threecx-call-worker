@@ -65,7 +65,7 @@ async def handle_event(event: dict) -> None:
     )
 
     try:
-        event_data = event.get("data", {})
+        event_data = event.get("attached_data", event.get("data", {}))
 
         details = event_data if event_data.get("status") else None
         if not details:
