@@ -12,9 +12,6 @@ RUN uv pip install --system --no-cache -r pyproject.toml && \
       -exec rm -rf {} + 2>/dev/null; \
     rm -rf /usr/local/lib/python3.12/site-packages/pip \
            /usr/local/lib/python3.12/site-packages/pygments \
-           /usr/local/lib/python3.12/site-packages/hive_metastore \
-           /usr/local/lib/python3.12/site-packages/pyiceberg \
-           /usr/local/lib/python3.12/site-packages/zstandard \
            /usr/local/lib/python3.12/site-packages/rich \
     ; true
 
