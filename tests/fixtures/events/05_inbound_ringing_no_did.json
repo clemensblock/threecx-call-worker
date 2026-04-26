@@ -1,6 +1,6 @@
 {
   "entity": "/callcontrol/102/participants/78",
-  "data": {
+  "attached_data": {
     "id": 78,
     "status": "Ringing",
     "party_caller_id": "0171-55512345",
