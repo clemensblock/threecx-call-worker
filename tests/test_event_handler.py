@@ -148,3 +148,26 @@ async def test_customer_lookup_on_ringing() -> None:
         await handle_event(event)
         call_kwargs = mock_write.call_args.kwargs
         assert call_kwargs["customer_id"] == "cust-abc-123"
+
+
+@pytest.mark.asyncio
+async def test_routepoint_event_processed(_mock_db: MagicMock) -> None:
+    """Events from non-numeric DNs (routepoints like crmintegration) are processed."""
+    event = {
+        "entity": "/callcontrol/crmintegration/participants/1344",
+        "attached_data": {
+            "id": 1344,
+            "status": "Ringing",
+            "party_caller_id": "+49 171 1234567",
+            "party_dn_type": "Wexternalline",
+            "party_caller_type": "Wexternalline",
+            "party_did": "+4930999888",
+        },
+    }
+    await handle_event(event)
+    _mock_db.assert_called_once()
+    call_kwargs = _mock_db.call_args.kwargs
+    assert call_kwargs["state"] == "ringing"
+    assert call_kwargs["direction"] == "inbound"
+    assert call_kwargs["extension"] == "crmintegration"
+    assert call_kwargs["participant_id"] == "1344"

@@ -17,7 +17,7 @@ from worker.threecx_client import get_participant_details
 
 logger = structlog.get_logger()
 
-PARTICIPANT_PATH_RE = re.compile(r"^/callcontrol/(\d+)/participants/(\d+)$")
+PARTICIPANT_PATH_RE = re.compile(r"^/callcontrol/([^/]+)/participants/(\d+)$")
 
 
 def _determine_direction(details: dict) -> str:
@@ -51,13 +51,20 @@ async def handle_event(event: dict) -> None:
     extension = match.group(1)
     participant_id_str = match.group(2)
 
-    if extension not in get_monitored_extensions():
-        logger.debug(
-            "event.unmonitored_extension",
-            extension=extension,
+    monitored = get_monitored_extensions()
+    if extension not in monitored:
+        if extension.isdigit():
+            logger.debug(
+                "event.unmonitored_extension",
+                extension=extension,
+                participant_id=participant_id_str,
+            )
+            return
+        logger.info(
+            "event.routepoint",
+            dn=extension,
             participant_id=participant_id_str,
         )
-        return
 
     log = logger.bind(
         correlation_id=participant_id_str,
