@@ -82,6 +82,9 @@ def write_call_event(
     connected_at: str | None = None,
     terminated_at: str | None = None,
     duration_seconds: int | None = None,
+    agent_extension: str | None = None,
+    status: str | None = None,
+    threecx_call_id: str | None = None,
 ) -> None:
     row: dict = {
         "participant_id": participant_id,
@@ -104,6 +107,12 @@ def write_call_event(
         row["terminated_at"] = terminated_at
     if duration_seconds is not None:
         row["duration_seconds"] = duration_seconds
+    if agent_extension is not None:
+        row["agent_extension"] = agent_extension
+    if status is not None:
+        row["status"] = status
+    if threecx_call_id is not None:
+        row["threecx_call_id"] = threecx_call_id
 
     try:
         get_supabase().table("call_logs").upsert(

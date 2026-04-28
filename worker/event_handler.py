@@ -55,6 +55,25 @@ def _extract_state(details: dict) -> str | None:
     return state_map.get(status)
 
 
+def _map_status(state: str) -> str:
+    """Map call state to CRM status column value."""
+    if state == "failed":
+        return "failed"
+    return "initiated"
+
+
+def _resolve_agent_extension(extension: str) -> str:
+    """Resolve the human agent extension from the entity.
+
+    For routepoint extensions (e.g. crmintegration), return the route_to
+    target. For direct extensions (e.g. 1000), return as-is.
+    """
+    route_to = get_route_to(extension)
+    if route_to:
+        return route_to
+    return extension
+
+
 def _extract_details(event: dict) -> dict | None:
     """Extract participant details from the event payload.
 
@@ -143,6 +162,7 @@ async def handle_event(event: dict) -> None:
             now_iso = datetime.now(UTC).isoformat()
             caller = get_caller_info(participant_id_str)
             duration = _calc_duration(participant_id_str, log)
+            agent_ext = _resolve_agent_extension(extension)
             write_call_event(
                 participant_id=participant_id_str,
                 state="terminated",
@@ -153,6 +173,10 @@ async def handle_event(event: dict) -> None:
                 customer_id=caller.get("customer_id"),
                 terminated_at=now_iso,
                 duration_seconds=duration,
+                phone_number=caller.get("caller_id_e164"),
+                agent_extension=agent_ext,
+                status=_map_status("terminated"),
+                threecx_call_id=participant_id_str,
             )
             # Clean up call group when primary terminates
             group = find_group(extension, participant_id_str)
@@ -203,6 +227,8 @@ async def handle_event(event: dict) -> None:
 
         now_iso = datetime.now(UTC).isoformat()
 
+        agent_ext = _resolve_agent_extension(extension)
+
         if state == "ringing" and direction == "inbound":
             # Register in call tracker for dedup
             get_or_create_group(extension, participant_id_str)
@@ -220,6 +246,9 @@ async def handle_event(event: dict) -> None:
                 caller_id_e164=caller_id_e164,
                 customer_id=customer_id,
                 phone_number=caller_id_e164,
+                agent_extension=agent_ext,
+                status=_map_status("ringing"),
+                threecx_call_id=participant_id_str,
             )
 
         elif state == "connected":
@@ -242,6 +271,10 @@ async def handle_event(event: dict) -> None:
                 caller_id=caller_id_raw,
                 caller_id_e164=caller_id_e164,
                 connected_at=now_iso,
+                phone_number=caller_id_e164,
+                agent_extension=agent_ext,
+                status=_map_status("connected"),
+                threecx_call_id=participant_id_str,
             )
 
         elif state == "terminated":
@@ -267,6 +300,10 @@ async def handle_event(event: dict) -> None:
                 caller_id_e164=caller_id_e164,
                 terminated_at=now_iso,
                 duration_seconds=duration,
+                phone_number=caller_id_e164,
+                agent_extension=agent_ext,
+                status=_map_status("terminated"),
+                threecx_call_id=participant_id_str,
             )
             # Clean up call group when primary terminates
             group = find_group(extension, participant_id_str)
@@ -282,6 +319,10 @@ async def handle_event(event: dict) -> None:
                 caller_id=caller_id_raw,
                 caller_id_e164=caller_id_e164,
                 terminated_at=now_iso,
+                phone_number=caller_id_e164,
+                agent_extension=agent_ext,
+                status=_map_status("failed"),
+                threecx_call_id=participant_id_str,
             )
 
         events_processed_total.inc()
