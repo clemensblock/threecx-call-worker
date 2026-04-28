@@ -147,6 +147,15 @@ def get_connected_at(participant_id: str) -> str | None:
     return None
 
 
+def delete_participant_entries(participant_id: str) -> None:
+    """Delete all call_logs entries for a phantom participant."""
+    try:
+        get_supabase().table("call_logs").delete().eq("participant_id", participant_id).execute()
+        logger.info("db.phantom_entries_deleted", participant_id=participant_id)
+    except Exception:
+        logger.exception("db.phantom_delete_failed", participant_id=participant_id)
+
+
 def get_caller_info(participant_id: str) -> dict:
     """Look up caller_id and caller_id_e164 from the ringing entry."""
     try:
